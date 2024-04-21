@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gallery</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/gallery-style.css') }}">
+</head>
+<body>
+  <div class="header">
+    <div class = "title-container">
+    <h1>Image Gallery</h1>
+    </div>
+    <div class="logout-container">
+      <form action="{{ url_for('logout') }}" method="post">
+        <button type="submit" class="logout-button">Log Out</button>
+      </form>
+    </div>
+  </div>
+  <div class="upload-container">
+    <a href="{{ url_for('upload_file') }}" class="upload-button"><button>Upload New Image</button></a>
+  </div>
+  <div class="search-container">
+    <input type="text" id="searchBox" placeholder="Search images..." onkeyup="searchImages()">
+  </div>
+  <div class="gallery-container">
+    <div class="gallery">
+      {% for image in images %}
+      <div class="image-container">
+        <img src="{{ image }}" alt="Image description here">
+        <div class="buttons">
+          <a href="{{ image }}" download>
+            <button type="button">Download</button>
+          </a>
+          <form action="{{ url_for('remove_image', filename=image.split('/')[-1]) }}" method="post" class="delete-form">
+            <input type="hidden" name="remove_password" value="">
+            <button type="button" onclick="confirmPassword(this.form)">Remove</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <script>
+  function searchImages() {
+    let input = document.getElementById('searchBox').value.toUpperCase();
+    let imageContainers = document.getElementsByClassName('image-container');
+    let gallery = document.querySelector('.gallery');
+  
+    for (let i = 0; i < imageContainers.length; i++) {
+        let img = imageContainers[i].getElementsByTagName('img')[0];
+        let filename = img.src.substring(img.src.lastIndexOf('/') + 1).toUpperCase();
+        if (filename.indexOf(input) > -1 || input === '') {
+            imageContainers[i].style.display = "block"; 
+        } else {
+            imageContainers[i].style.display = "none";
+        }
+    }
+  }
+  </script>
+  <script>
+    function confirmPassword(form) {
+      const password = prompt("Please enter the upload password to confirm deletion:");
+      if (password !== null && password !== "") {
+        form.remove_password.value = password; // Set the hidden field's value to the entered password
+        form.submit(); // Submit the form
+      } else {
+        alert("Deletion cancelled or no password entered.");
+      }
+    }
+  </script>
+</body>
+</html>
