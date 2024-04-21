@@ -49,6 +49,7 @@ def login():
         conn.close()
         
         if user and check_password_hash(user[2], password):
+            session['user_id'] = user[0]  # Store the user's ID in the session
             return redirect(url_for('gallery'))
         else:
             flash('Invalid username or password')
@@ -82,22 +83,31 @@ def signup():
 
 @app.route('/gallery')
 def gallery():
-    bucket = storage_client.get_bucket(app.config['GCP_BUCKET'])
-    blobs = bucket.list_blobs()
-    images = []
-    for blob in blobs:
-        images.append(f"https://storage.googleapis.com/{app.config['GCP_BUCKET']}/{blob.name}")
+    user_id = session.get('user_id')
     
-    return render_template('gallery.html', images=images)
+    if not user_id:
+        return redirect(url_for('login'))
+    
+    conn = mysql.connector.connect(**db_config)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM Image WHERE UserID = %s', (user_id,))
+    images = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    image_urls = []
+    for image in images:
+        image_urls.append(image[4])  # Assuming the URL is stored in the 5th column of the Image table
+    
+    return render_template('gallery.html', images=image_urls)
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
+        user_id = session.get('user_id')
         
-        # upload_password = request.form.get('upload_password')
-        # if upload_password != os.getenv('MOD_PASSWORD'):
-        #     flash('Invalid upload password', 'error')
-        #     return redirect(request.url)
+        if not user_id:
+            return redirect(url_for('login'))
         
         if 'file' not in request.files:
             flash('No file part', 'error')
@@ -114,7 +124,7 @@ def upload_file():
         cursor = conn.cursor()
 
         # Check for duplicate uploads based on filename
-        cursor.execute('SELECT * FROM Image WHERE Title = %s', (filename,))
+        cursor.execute('SELECT * FROM Image WHERE Title = %s AND UserID = %s', (filename, user_id))
         if cursor.fetchone():
             cursor.close()
             conn.close()
@@ -123,15 +133,16 @@ def upload_file():
 
         # No duplicates found; proceed with file upload to GCP bucket
         bucket = storage_client.get_bucket(app.config['GCP_BUCKET'])
-        blob = bucket.blob(filename)
+        blob = bucket.blob(f"user_{user_id}/{filename}")
         blob.upload_from_file(file)
-        file_url = f"https://storage.googleapis.com/{app.config['GCP_BUCKET']}/{filename}"
+        file_url = f"https://storage.googleapis.com/{app.config['GCP_BUCKET']}/user_{user_id}/{filename}"
         
-        cursor.execute('INSERT INTO Image (Title, Description, Tags, URL) VALUES (%s, %s, %s, %s)', (
+        cursor.execute('INSERT INTO Image (Title, Description, Tags, URL, UserID) VALUES (%s, %s, %s, %s, %s)', (
             request.form.get('title', 'Untitled'),
             request.form.get('description', ''),
             request.form.get('tags', ''),
-            file_url
+            file_url,
+            user_id
         ))
         conn.commit()
 
@@ -152,16 +163,15 @@ def logout():
 
 @app.route('/remove_image/<filename>', methods=['POST'])
 def remove_image(filename):
+    user_id = session.get('user_id')
     
-    # remove_password = request.form['remove_password']
-    # if remove_password != os.getenv('MOD_PASSWORD'):
-    #     flash('Invalid remove password', 'error')
-    #     return redirect(url_for('gallery'))
+    if not user_id:
+        return redirect(url_for('login'))
     
     # Delete image from GCP bucket
     try:
         bucket = storage_client.get_bucket(app.config['GCP_BUCKET'])
-        blob = bucket.blob(filename)
+        blob = bucket.blob(f"user_{user_id}/{filename}")
         blob.delete()
     except Exception as e:
         flash('Error deleting image', 'error')
@@ -171,7 +181,7 @@ def remove_image(filename):
     try:
         conn = mysql.connector.connect(**db_config)
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM Image WHERE URL LIKE %s', (f'%{filename}',))
+        cursor.execute('DELETE FROM Image WHERE URL LIKE %s AND UserID = %s', (f'%{filename}', user_id))
         conn.commit()
         cursor.close()
         conn.close()
