@@ -2,16 +2,18 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import mysql.connector
-import boto3
+from google.cloud import storage
 import os
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
+# Configure Flask
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
 
+# Database configuration
 db_config = {
     'host': os.getenv('DB_HOST'),
     'user': os.getenv('DB_USER'),
@@ -19,17 +21,14 @@ db_config = {
     'database': os.getenv('DB_DATABASE')
 }
 
-# AWS S3 Configuration
-app.config['S3_BUCKET'] = os.getenv('S3_BUCKET')
-app.config['S3_KEY'] = os.getenv('S3_KEY')
-app.config['S3_SECRET'] = os.getenv('S3_SECRET')
+# Set Google Cloud credentials environment variable
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
 
-# Configure the S3 client
-s3_client = boto3.client(
-    's3',
-    aws_access_key_id=app.config['S3_KEY'],
-    aws_secret_access_key=app.config['S3_SECRET']
-)
+# GCP Bucket Configuration
+app.config['GCP_BUCKET'] = os.getenv('GCP_BUCKET')
+
+# Configure the GCP Storage client
+storage_client = storage.Client()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
@@ -81,14 +80,13 @@ def signup():
     
     return render_template('signup.html')
 
-@app.route('/')
 @app.route('/gallery')
 def gallery():
-    response = s3_client.list_objects_v2(Bucket=app.config['S3_BUCKET'])
+    bucket = storage_client.get_bucket(app.config['GCP_BUCKET'])
+    blobs = bucket.list_blobs()
     images = []
-    if 'Contents' in response:
-        for obj in response['Contents']:
-            images.append(f"https://{app.config['S3_BUCKET']}.s3.amazonaws.com/{obj['Key']}")
+    for blob in blobs:
+        images.append(f"https://storage.googleapis.com/{app.config['GCP_BUCKET']}/{blob.name}")
     
     return render_template('gallery.html', images=images)
 
@@ -98,12 +96,15 @@ def upload_file():
         
         upload_password = request.form.get('upload_password')
         if upload_password != os.getenv('MOD_PASSWORD'):
+            flash('Invalid upload password', 'error')
             return redirect(request.url)
         
         if 'file' not in request.files:
+            flash('No file part', 'error')
             return redirect(request.url)
         file = request.files['file']
         if file.filename == '' or not allowed_file(file.filename):
+            flash('No selected file or file type not allowed', 'error')
             return redirect(request.url)
         
         filename = secure_filename(file.filename)
@@ -120,9 +121,11 @@ def upload_file():
             flash('Duplicate files not allowed', 'error')  
             return redirect(request.url)
 
-        # No duplicates found; proceed with file upload to S3
-        s3_client.upload_fileobj(file, app.config['S3_BUCKET'], filename)
-        file_url = f"https://{app.config['S3_BUCKET']}.s3.amazonaws.com/{filename}"
+        # No duplicates found; proceed with file upload to GCP bucket
+        bucket = storage_client.get_bucket(app.config['GCP_BUCKET'])
+        blob = bucket.blob(filename)
+        blob.upload_from_file(file)
+        file_url = f"https://storage.googleapis.com/{app.config['GCP_BUCKET']}/{filename}"
         
         cursor.execute('INSERT INTO Image (Title, Description, Tags, URL) VALUES (%s, %s, %s, %s)', (
             request.form.get('title', 'Untitled'),
@@ -142,7 +145,6 @@ def upload_file():
     # Show the upload form for GET requests
     return render_template('upload.html')
 
-
 @app.route('/logout', methods=['POST'])
 def logout():
     session.clear()
@@ -153,12 +155,16 @@ def remove_image(filename):
     
     remove_password = request.form['remove_password']
     if remove_password != os.getenv('MOD_PASSWORD'):
+        flash('Invalid remove password', 'error')
         return redirect(url_for('gallery'))
     
-    # Delete image from S3 bucket
+    # Delete image from GCP bucket
     try:
-        s3_client.delete_object(Bucket=app.config['S3_BUCKET'], Key=filename)
+        bucket = storage_client.get_bucket(app.config['GCP_BUCKET'])
+        blob = bucket.blob(filename)
+        blob.delete()
     except Exception as e:
+        flash('Error deleting image', 'error')
         return redirect(url_for('gallery'))
 
     # Remove image record from database
@@ -170,6 +176,7 @@ def remove_image(filename):
         cursor.close()
         conn.close()
     except Exception as e:
+        flash('Error deleting image record', 'error')
         return redirect(url_for('gallery'))
     
     return redirect(url_for('gallery'))
