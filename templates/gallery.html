@@ -7,8 +7,8 @@
 </head>
 <body>
   <div class="header">
-    <div class = "title-container">
-    <h1>Image Gallery</h1>
+    <div class="title-container">
+      <h1>Image Gallery</h1>
     </div>
     <div class="logout-container">
       <form action="{{ url_for('logout') }}" method="post">
@@ -32,8 +32,7 @@
             <button type="button">Download</button>
           </a>
           <form action="{{ url_for('remove_image', filename=image.split('/')[-1]) }}" method="post" class="delete-form">
-            <input type="hidden" name="remove_password" value="">
-            <button type="button" onclick="confirmPassword(this.form)">Remove</button>
+            <button type="submit">Remove</button>
           </form>
         </div>
       </div>
@@ -56,17 +55,6 @@
         }
     }
   }
-  </script>
-  <script>
-    function confirmPassword(form) {
-      const password = prompt("Please enter the upload password to confirm deletion:");
-      if (password !== null && password !== "") {
-        form.remove_password.value = password; // Set the hidden field's value to the entered password
-        form.submit(); // Submit the form
-      } else {
-        alert("Deletion cancelled or no password entered.");
-      }
-    }
   </script>
 </body>
 </html>
