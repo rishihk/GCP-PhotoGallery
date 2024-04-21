@@ -94,10 +94,10 @@ def gallery():
 def upload_file():
     if request.method == 'POST':
         
-        upload_password = request.form.get('upload_password')
-        if upload_password != os.getenv('MOD_PASSWORD'):
-            flash('Invalid upload password', 'error')
-            return redirect(request.url)
+        # upload_password = request.form.get('upload_password')
+        # if upload_password != os.getenv('MOD_PASSWORD'):
+        #     flash('Invalid upload password', 'error')
+        #     return redirect(request.url)
         
         if 'file' not in request.files:
             flash('No file part', 'error')
@@ -153,10 +153,10 @@ def logout():
 @app.route('/remove_image/<filename>', methods=['POST'])
 def remove_image(filename):
     
-    remove_password = request.form['remove_password']
-    if remove_password != os.getenv('MOD_PASSWORD'):
-        flash('Invalid remove password', 'error')
-        return redirect(url_for('gallery'))
+    # remove_password = request.form['remove_password']
+    # if remove_password != os.getenv('MOD_PASSWORD'):
+    #     flash('Invalid remove password', 'error')
+    #     return redirect(url_for('gallery'))
     
     # Delete image from GCP bucket
     try:

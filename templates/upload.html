@@ -9,8 +9,6 @@
     <div class="form-container">
         <h1>Upload New Image</h1>
         <form action="{{ url_for('upload_file') }}" method="post" enctype="multipart/form-data">
-            <label for="upload_password">Password:</label>
-            <input type="password" name="upload_password" id="upload_password" required>
             <label for="file">Choose a file:</label>
             <input type="file" name="file" id="file" required>
             <label for="title">Title:</label>
